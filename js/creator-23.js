@@ -5333,6 +5333,8 @@ function drawCard() {
         window.cardDrawingPromiseResolver = null;
 	}
 }
+
+
 //DOWNLOADING
 function downloadCard(alt = false, jpeg = false) {
 	if (card.infoArtist.replace(/ /g, '') == '' && !card.artSource.includes('/img/blank.png') && !card.artZoom == 0) {
@@ -5368,6 +5370,17 @@ function downloadCard(alt = false, jpeg = false) {
 		}
 	}
 }
+
+document.addEventListener('mousedown', function(event) {
+    if (event.button !== 1) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    console.log('MIDDLE CLICK');
+    downloadCard();
+}, true);
+
 async function bulkDownloadZip() {
     // 1. Initial checks for libraries and saved cards.
     if (typeof JSZip === 'undefined') {

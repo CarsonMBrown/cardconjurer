@@ -1,9 +1,8 @@
 """
 IMPORTS
 """
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-import webbrowser
 import os
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
 """
 SETTINGS
@@ -22,6 +21,7 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
+
 """
 START APP
 """
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     print("Server started http://%s:%s" % (NAME, PORT))
 
     try:
-        webbrowser.open('http://localhost:8080', new=2)
+        # webbrowser.open('http://localhost:8080', new=2)
         webServer.serve_forever()
     except KeyboardInterrupt:
         pass
