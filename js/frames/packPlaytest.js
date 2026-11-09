@@ -25,7 +25,7 @@ document.querySelector('#loadFrameVersion').onclick = async function() {
 	//sets card version
 	card.version = 'playtest';
 	card.showsFlavorBar = false;
-	loadScript('/js/frames/manaSymbolsOutline.js');
+	loadScript('/js/frames/manaSymbolsOutlinePlaytest.js');
 	//art bounds
 	card.artBounds = {x:0.132, y:0.1439, width:0.736, height:0.3362};
 	autoFitArt();
