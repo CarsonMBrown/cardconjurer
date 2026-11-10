@@ -1,124 +1,155 @@
-document.addEventListener('contextmenu', function(event) {
-    event.preventDefault();
-});
-
-// Track the current art scaling state
-let artScaleState = 'autofit';
-let autofitZoom = null; // Store the original autofit zoom value
-
-document.addEventListener('auxclick', async function(event) {
-    event.stopImmediatePropagation();
-    event.preventDefault();
-
-    // Middle mouse button = download current card
-    if (event.button === 1) {
-        downloadCard();
-        return;
+(function () {
+    // ---------- Clean up any previous copy of these listeners ----------
+    // Lets this file be reloaded or re-run (htmx, edits, console paste)
+    // without double-firing and without being blocked by an old copy.
+    if (window.__customControlsCleanup) {
+        try { window.__customControlsCleanup(); } catch (e) { /* ignore */ }
     }
-
-    // Right mouse button = cycle through art sizing
-   if (event.button === 2) {
-
-    if (artScaleState === 'autofit') {
-        // Get baseline autofit zoom and go to bigger
-        autoFitArt();
-        autofitZoom = parseFloat(document.querySelector('#art-zoom').value);
-        const biggerZoom = (autofitZoom * 1.2).toFixed(1);
-        document.querySelector('#art-zoom').value = biggerZoom;
-        artEdited();
-        artScaleState = 'bigger';
-        console.log('Art: 20% Bigger (' + biggerZoom + '%)');
-    } else if (artScaleState === 'bigger') {
-        // Go to biggest
-        const biggestZoom = (autofitZoom * 1.4).toFixed(1);
-        document.querySelector('#art-zoom').value = biggestZoom;
-        artEdited();
-        artScaleState = 'biggest';
-        console.log('Art: 40% Bigger (' + biggestZoom + '%)');
-    } else if (artScaleState === 'biggest') {
-        // Back to autofit
-        autoFitArt();
-        autofitZoom = parseFloat(document.querySelector('#art-zoom').value);
-        artScaleState = 'autofit';
-        console.log('Art: Auto Fit');
+    const registered = [];
+    function on(type, handler, options) {
+        document.addEventListener(type, handler, options);
+        registered.push([type, handler, options]);
     }
-    return;
-    }
+    window.__customControlsCleanup = function () {
+        registered.forEach(([type, handler, options]) =>
+            document.removeEventListener(type, handler, options));
+        registered.length = 0;
+    };
 
+    // ---------- Disable the right-click context menu ----------
+    on('contextmenu', e => e.preventDefault());
 
-    // load the PREVIOUS card
-    if (event.button === 4) {
-        // Get the card selection dropdown
-        const select = document.querySelector('#load-card-options');
+    // ---------- Art size cycling ----------
+    // autofit -> 20% bigger -> 40% bigger -> autofit
+    const ART_STATES = [
+        { multiplier: 1.0, label: 'Auto Fit' },
+        { multiplier: 1.2, label: '20% Bigger' },
+        { multiplier: 1.4, label: '40% Bigger' }
+    ];
+    let artStateIndex = 0;
 
-        if (!select) return;
+    // direction: +1 = next size, -1 = previous size
+    function cycleArtSize(direction = 1) {
+        const zoomInput = document.querySelector('#art-zoom');
+        if (!zoomInput) return;
 
-        // Get all actual card options, ignoring "None selected"
-        const options = Array.from(select.options).filter(
-            option => !option.disabled
-        );
+        artStateIndex = (artStateIndex + direction + ART_STATES.length) % ART_STATES.length;
+        const state = ART_STATES[artStateIndex];
 
-        if (options.length === 0) return;
+        autoFitArt(); // fresh baseline every time
 
-        // Find the currently selected card
-        let currentIndex = options.findIndex(
-            option => option.value === select.value
-        );
-
-        // If no card is selected, start at the last card
-        if (currentIndex === -1) {
-            currentIndex = options.length - 1;
+        if (state.multiplier !== 1.0) {
+            const newZoom = (parseFloat(zoomInput.value) * state.multiplier).toFixed(1);
+            zoomInput.value = newZoom;
+            artEdited();
+            console.log('Art: ' + state.label + ' (' + newZoom + '%)');
         } else {
-            // Move to the previous card.
-            // Adding options.length prevents a negative number.
-            // % options.length makes it wrap from the first card to the last.
-            currentIndex =
-                (currentIndex - 1 + options.length) % options.length;
+            console.log('Art: ' + state.label);
         }
-
-        // Get the previous card
-        const option = options[currentIndex];
-
-        // Update the dropdown selection
-        select.value = option.value;
-
-        // Load the selected card
-        await loadCard(option.value);
-        return;
     }
 
-    // load the NEXT card
-    if (event.button === 3) {
-        // Get the card selection dropdown
+    // ---------- Previous / next card ----------
+    async function stepCard(direction) {
         const select = document.querySelector('#load-card-options');
-
         if (!select) return;
 
-        // Get all actual card options, ignoring "None selected"
-        const options = Array.from(select.options).filter(
-            option => !option.disabled
-        );
-
+        const options = Array.from(select.options).filter(o => !o.disabled);
         if (options.length === 0) return;
 
-        // Find the currently selected card
-        let currentIndex = options.findIndex(
-            option => option.value === select.value
-        );
+        let index = options.findIndex(o => o.value === select.value);
+        index = index === -1
+            ? (direction > 0 ? 0 : options.length - 1)
+            : (index + direction + options.length) % options.length;
 
-        // Move to the next card.
-        // % options.length makes it wrap from the last card to the first.
-        currentIndex = (currentIndex + 1) % options.length;
-
-        // Get the next card
-        const option = options[currentIndex];
-
-        // Update the dropdown selection
-        select.value = option.value;
-
-        // Load the selected card
-        await loadCard(option.value);
-
-        return;
+        select.value = options[index].value;
+        await loadCard(options[index].value);
     }
-});
+
+    // ---------- Mouse controls (always on) ----------
+    // pointerup fires for every button in Firefox, Chrome and Edge.
+    // Middle click (button 1) is handled by creator-23.js, so it's not handled here.
+    on('pointerup', async function (event) {
+        switch (event.button) {
+            case 2: // right click: next art size
+                event.preventDefault();
+                cycleArtSize(1);
+                break;
+            case 3: // side/back button: previous card
+                event.preventDefault();
+                await stepCard(-1);
+                break;
+            case 4: // side/forward button: next card
+                event.preventDefault();
+                await stepCard(1);
+                break;
+        }
+    }, true);
+
+    // Block the browser's own back/forward navigation for the side buttons.
+    // Firefox may still need mousebutton.4th/5th.enabled = false in about:config.
+    ['mousedown', 'mouseup', 'auxclick'].forEach(type => {
+        on(type, function (event) {
+            if (event.button === 3 || event.button === 4) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+        }, true);
+    });
+
+    on('auxclick', function (event) {
+        if (event.button === 2) event.preventDefault();
+    }, true);
+
+    // ---------- Keyboard controls (always on) ----------
+    //   Up / Down      next / previous art size
+    //   Left / Right   previous / next card
+    //   Space          download current card
+
+    // Only real text-entry fields block the shortcuts.
+    function isTypingTarget(el) {
+        if (!el) return false;
+        if (el.isContentEditable) return true;
+        const tag = el.tagName;
+        if (tag === 'TEXTAREA') return true;
+        if (tag === 'INPUT') {
+            const nonText = ['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image'];
+            return !nonText.includes((el.type || '').toLowerCase());
+        }
+        return false;
+    }
+
+    on('keydown', async function (event) {
+        if (isTypingTarget(event.target)) return;
+        if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+
+        const handled = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Spacebar'];
+        if (!handled.includes(event.key)) return;
+
+        const tag = event.target.tagName;
+
+        // Let space still activate a focused button or link
+        if ((event.key === ' ' || event.key === 'Spacebar') && (tag === 'BUTTON' || tag === 'A')) return;
+
+        // Take over from a focused dropdown/slider so Firefox doesn't also change its value
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (tag === 'SELECT' || tag === 'INPUT') event.target.blur();
+
+        switch (event.key) {
+            case 'w':    cycleArtSize(1);   break;
+            case 'ArrowUp':    cycleArtSize(1);   break;
+            case 'x':  cycleArtSize(-1);  break;
+            case 'ArrowDown':  cycleArtSize(-1);  break;
+            case 'a':  await stepCard(-1); break;
+            case 'd':  await stepCard(-1); break;
+            case 'f': await stepCard(1);  break;
+            case 'ArrowRight': await stepCard(1);  break;
+            case ' ':
+            case 'Spacebar':
+                if (!event.repeat) downloadCard();
+                break;
+        }
+    }, true);
+
+    console.log('Custom mouse + keyboard controls active');
+})();
